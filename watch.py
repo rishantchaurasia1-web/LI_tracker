@@ -132,6 +132,7 @@ def is_target_company(company_name):
 
 
 def send_telegram(job):
+    """Returns True if Telegram confirmed delivery, False otherwise."""
     star = "⭐ " if is_target_company(job["company"]) else ""
     text = (
         f"🎯 {star}*{job['title']}*\n"
@@ -141,7 +142,7 @@ def send_telegram(job):
         f"[Apply now →]({job['url']})"
     )
     try:
-        httpx.post(
+        r = httpx.post(
             f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/sendMessage",
             data={
                 "chat_id": TELEGRAM_CHAT_ID,
@@ -151,8 +152,14 @@ def send_telegram(job):
             },
             timeout=10,
         )
+        if r.status_code == 200:
+            return True
+        else:
+            print(f"  Telegram returned {r.status_code}: {r.text[:200]}", flush=True)
+            return False
     except Exception as e:
         print(f"  Telegram send error: {e}", flush=True)
+        return False
 
 
 def run_once():
@@ -160,6 +167,7 @@ def run_once():
     total_seen = 0
     total_matched = 0
     total_alerted = 0
+    total_failed = 0
     with httpx.Client() as client:
         for query in SEARCH_QUERIES:
             jobs = fetch_jobs_for_query(query, client)
@@ -171,16 +179,20 @@ def run_once():
                 cur = conn.execute("SELECT 1 FROM seen WHERE job_id = ?", (job["id"],))
                 if cur.fetchone():
                     continue
-                send_telegram(job)
-                conn.execute(
-                    "INSERT INTO seen (job_id, seen_at) VALUES (?, ?)",
-                    (job["id"], int(time.time())),
-                )
-                conn.commit()
-                total_alerted += 1
+                success = send_telegram(job)
+                if success:
+                    conn.execute(
+                        "INSERT INTO seen (job_id, seen_at) VALUES (?, ?)",
+                        (job["id"], int(time.time())),
+                    )
+                    conn.commit()
+                    total_alerted += 1
+                else:
+                    total_failed += 1
                 time.sleep(1)
             time.sleep(3)
-    print(f"Scanned {total_seen}, matched {total_matched}, new alerts {total_alerted}", flush=True)
+    print(f"Scanned {total_seen}, matched {total_matched}, "
+          f"new alerts {total_alerted}, failed {total_failed}", flush=True)
 
 
 if __name__ == "__main__":
