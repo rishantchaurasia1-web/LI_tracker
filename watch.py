@@ -57,6 +57,16 @@ TARGET_COMPANIES = [
     "walker & dunlop",
 ]
 
+# Common Indian city/state names so jobs that say just "Mumbai" (no country) still match
+INDIA_HINTS = [
+    "india",
+    "mumbai", "bombay", "bengaluru", "bangalore", "hyderabad", "pune", "gurgaon",
+    "gurugram", "noida", "delhi", "new delhi", "ncr", "chennai", "kolkata",
+    "ahmedabad", "jaipur", "kochi", "cochin", "indore", "thane", "navi mumbai",
+    "maharashtra", "karnataka", "telangana", "tamil nadu", "uttar pradesh",
+    "haryana", "gujarat", "rajasthan", "west bengal", "kerala",
+]
+
 HEADERS = {
     "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
                   "AppleWebKit/537.36 (KHTML, like Gecko) "
@@ -64,10 +74,7 @@ HEADERS = {
     "Accept-Language": "en-US,en;q=0.9",
 }
 
-# LinkedIn "posted in last X seconds"
-# 900 = 15 min. Since this runs every 10 min via cron, a small overlap.
-# Combined with in-run dedupe below, duplicates are fully prevented.
-TIME_WINDOW_SECONDS = 900
+TIME_WINDOW_SECONDS = 900  # 15 min
 
 
 def build_url(query):
@@ -112,11 +119,42 @@ def fetch_jobs_for_query(query, client):
         return []
 
 
-def passes_filters(job):
+def passes_title_filter(job):
     title_lower = job["title"].lower()
     if not any(kw in title_lower for kw in INCLUDE_KEYWORDS):
         return False
     if any(kw in title_lower for kw in EXCLUDE_KEYWORDS):
+        return False
+    return True
+
+
+def passes_location_filter(job):
+    """
+    Accept if:
+      - Location mentions India (any mode: on-site/hybrid/remote), OR
+      - Location mentions 'remote' (fully remote from anywhere)
+    Reject hybrid/on-site outside India.
+    """
+    loc = job["location"].lower()
+
+    # Bucket 1: India in any mode
+    if any(h in loc for h in INDIA_HINTS):
+        return True
+
+    # Bucket 2: remote (any country, or location-less remote)
+    # Must be fully remote, not hybrid. Hybrid outside India is rejected.
+    is_remote = "remote" in loc
+    is_hybrid = "hybrid" in loc
+    if is_remote and not is_hybrid:
+        return True
+
+    return False
+
+
+def passes_filters(job):
+    if not passes_title_filter(job):
+        return False
+    if not passes_location_filter(job):
         return False
     return True
 
@@ -154,10 +192,11 @@ def send_telegram(job):
 
 def run_once():
     total_scanned = 0
-    total_matched = 0
+    total_title_matched = 0
+    total_location_matched = 0
     total_alerted = 0
     total_failed = 0
-    seen_this_run = set()  # in-run dedupe only — prevents alerting same job twice when it appears in multiple queries
+    seen_this_run = set()
 
     with httpx.Client() as client:
         for query in SEARCH_QUERIES:
@@ -166,19 +205,23 @@ def run_once():
             for job in jobs:
                 if job["id"] in seen_this_run:
                     continue
-                if not passes_filters(job):
+                if not passes_title_filter(job):
                     continue
-                total_matched += 1
+                total_title_matched += 1
+                if not passes_location_filter(job):
+                    continue
+                total_location_matched += 1
                 seen_this_run.add(job["id"])
                 success = send_telegram(job)
                 if success:
                     total_alerted += 1
-                    print(f"  ✅ {job['title']} @ {job['company']}", flush=True)
+                    print(f"  ✅ {job['title']} @ {job['company']} — {job['location']}", flush=True)
                 else:
                     total_failed += 1
                 time.sleep(1)
             time.sleep(3)
-    print(f"Scanned {total_scanned}, matched {total_matched}, "
+    print(f"Scanned {total_scanned}, title-matched {total_title_matched}, "
+          f"location-matched {total_location_matched}, "
           f"alerted {total_alerted}, failed {total_failed}", flush=True)
 
 
