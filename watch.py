@@ -57,7 +57,6 @@ TARGET_COMPANIES = [
     "walker & dunlop",
 ]
 
-# Common Indian city/state names so jobs that say just "Mumbai" (no country) still match
 INDIA_HINTS = [
     "india",
     "mumbai", "bombay", "bengaluru", "bangalore", "hyderabad", "pune", "gurgaon",
@@ -74,7 +73,40 @@ HEADERS = {
     "Accept-Language": "en-US,en;q=0.9",
 }
 
-TIME_WINDOW_SECONDS = 900  # 15 min
+# 86400 = 24 hours
+TIME_WINDOW_SECONDS = 86400
+
+SEEN_FILE = "seen_jobs.txt"
+# How long to keep entries in the seen file (seconds). 7 days = plenty.
+SEEN_TTL_SECONDS = 7 * 24 * 3600
+
+
+def load_seen():
+    """Returns a dict: {job_id: timestamp_when_added}"""
+    seen = {}
+    if not os.path.exists(SEEN_FILE):
+        return seen
+    now = int(time.time())
+    with open(SEEN_FILE, "r") as f:
+        for line in f:
+            line = line.strip()
+            if not line or "," not in line:
+                continue
+            try:
+                job_id, ts = line.split(",", 1)
+                ts = int(ts)
+                # Skip entries older than TTL (housekeeping)
+                if now - ts < SEEN_TTL_SECONDS:
+                    seen[job_id] = ts
+            except ValueError:
+                continue
+    return seen
+
+
+def save_seen(seen):
+    with open(SEEN_FILE, "w") as f:
+        for job_id, ts in seen.items():
+            f.write(f"{job_id},{ts}\n")
 
 
 def build_url(query):
@@ -129,34 +161,14 @@ def passes_title_filter(job):
 
 
 def passes_location_filter(job):
-    """
-    Accept if:
-      - Location mentions India (any mode: on-site/hybrid/remote), OR
-      - Location mentions 'remote' (fully remote from anywhere)
-    Reject hybrid/on-site outside India.
-    """
     loc = job["location"].lower()
-
-    # Bucket 1: India in any mode
     if any(h in loc for h in INDIA_HINTS):
         return True
-
-    # Bucket 2: remote (any country, or location-less remote)
-    # Must be fully remote, not hybrid. Hybrid outside India is rejected.
     is_remote = "remote" in loc
     is_hybrid = "hybrid" in loc
     if is_remote and not is_hybrid:
         return True
-
     return False
-
-
-def passes_filters(job):
-    if not passes_title_filter(job):
-        return False
-    if not passes_location_filter(job):
-        return False
-    return True
 
 
 def is_target_company(company_name):
@@ -191,19 +203,22 @@ def send_telegram(job):
 
 
 def run_once():
+    seen = load_seen()
+    print(f"Loaded {len(seen)} previously-seen job ids", flush=True)
+
     total_scanned = 0
     total_title_matched = 0
     total_location_matched = 0
     total_alerted = 0
     total_failed = 0
-    seen_this_run = set()
+    now = int(time.time())
 
     with httpx.Client() as client:
         for query in SEARCH_QUERIES:
             jobs = fetch_jobs_for_query(query, client)
             total_scanned += len(jobs)
             for job in jobs:
-                if job["id"] in seen_this_run:
+                if job["id"] in seen:
                     continue
                 if not passes_title_filter(job):
                     continue
@@ -211,18 +226,21 @@ def run_once():
                 if not passes_location_filter(job):
                     continue
                 total_location_matched += 1
-                seen_this_run.add(job["id"])
                 success = send_telegram(job)
                 if success:
+                    seen[job["id"]] = now
                     total_alerted += 1
                     print(f"  ✅ {job['title']} @ {job['company']} — {job['location']}", flush=True)
                 else:
                     total_failed += 1
                 time.sleep(1)
             time.sleep(3)
+
+    save_seen(seen)
     print(f"Scanned {total_scanned}, title-matched {total_title_matched}, "
           f"location-matched {total_location_matched}, "
-          f"alerted {total_alerted}, failed {total_failed}", flush=True)
+          f"alerted {total_alerted}, failed {total_failed}, "
+          f"seen-file now has {len(seen)} ids", flush=True)
 
 
 if __name__ == "__main__":
