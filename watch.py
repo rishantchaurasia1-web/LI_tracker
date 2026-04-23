@@ -1,6 +1,5 @@
 import os
 import httpx
-import sqlite3
 import time
 import urllib.parse
 import re
@@ -65,18 +64,14 @@ HEADERS = {
     "Accept-Language": "en-US,en;q=0.9",
 }
 
-DB_PATH = "jobs_seen.db"
-
-
-def init_db():
-    conn = sqlite3.connect(DB_PATH)
-    conn.execute("CREATE TABLE IF NOT EXISTS seen (job_id TEXT PRIMARY KEY, seen_at INTEGER)")
-    conn.commit()
-    return conn
+# LinkedIn "posted in last X seconds"
+# 900 = 15 min. Since this runs every 10 min via cron, a small overlap.
+# Combined with in-run dedupe below, duplicates are fully prevented.
+TIME_WINDOW_SECONDS = 900
 
 
 def build_url(query):
-    params = {"keywords": query, "f_TPR": "r3600", "sortBy": "DD"}
+    params = {"keywords": query, "f_TPR": f"r{TIME_WINDOW_SECONDS}", "sortBy": "DD"}
     return "https://www.linkedin.com/jobs-guest/jobs/api/seeMoreJobPostings/search?" + urllib.parse.urlencode(params)
 
 
@@ -132,7 +127,6 @@ def is_target_company(company_name):
 
 
 def send_telegram(job):
-    """Returns True if Telegram confirmed delivery, False otherwise."""
     star = "⭐ " if is_target_company(job["company"]) else ""
     text = (
         f"🎯 {star}*{job['title']}*\n"
@@ -152,47 +146,40 @@ def send_telegram(job):
             },
             timeout=10,
         )
-        if r.status_code == 200:
-            return True
-        else:
-            print(f"  Telegram returned {r.status_code}: {r.text[:200]}", flush=True)
-            return False
+        return r.status_code == 200
     except Exception as e:
         print(f"  Telegram send error: {e}", flush=True)
         return False
 
 
 def run_once():
-    conn = init_db()
-    total_seen = 0
+    total_scanned = 0
     total_matched = 0
     total_alerted = 0
     total_failed = 0
+    seen_this_run = set()  # in-run dedupe only — prevents alerting same job twice when it appears in multiple queries
+
     with httpx.Client() as client:
         for query in SEARCH_QUERIES:
             jobs = fetch_jobs_for_query(query, client)
-            total_seen += len(jobs)
+            total_scanned += len(jobs)
             for job in jobs:
+                if job["id"] in seen_this_run:
+                    continue
                 if not passes_filters(job):
                     continue
                 total_matched += 1
-                cur = conn.execute("SELECT 1 FROM seen WHERE job_id = ?", (job["id"],))
-                if cur.fetchone():
-                    continue
+                seen_this_run.add(job["id"])
                 success = send_telegram(job)
                 if success:
-                    conn.execute(
-                        "INSERT INTO seen (job_id, seen_at) VALUES (?, ?)",
-                        (job["id"], int(time.time())),
-                    )
-                    conn.commit()
                     total_alerted += 1
+                    print(f"  ✅ {job['title']} @ {job['company']}", flush=True)
                 else:
                     total_failed += 1
                 time.sleep(1)
             time.sleep(3)
-    print(f"Scanned {total_seen}, matched {total_matched}, "
-          f"new alerts {total_alerted}, failed {total_failed}", flush=True)
+    print(f"Scanned {total_scanned}, matched {total_matched}, "
+          f"alerted {total_alerted}, failed {total_failed}", flush=True)
 
 
 if __name__ == "__main__":
