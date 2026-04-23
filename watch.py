@@ -15,6 +15,8 @@ SEARCH_QUERIES = [
     "real estate underwriter",
     "real estate capital markets",
     "real estate private equity",
+    "asset management analyst",
+    "investment banking analyst",
 ]
 
 INCLUDE_KEYWORDS = [
@@ -23,7 +25,7 @@ INCLUDE_KEYWORDS = [
     "real estate investment analyst", "real estate underwriter", "underwriting analyst",
     "real estate analyst",
     "asset management analyst", "real estate asset manager", "portfolio analyst",
-    "fund analyst", "investment management analyst",
+    "fund analyst", "investment management analyst", "investment banking analyst",
     "capital markets analyst", "real estate private equity", "repe analyst",
     "real estate debt analyst", "real estate credit analyst", "commercial mortgage analyst",
     "cmbs analyst", "real estate finance analyst", "real estate lending analyst",
@@ -43,7 +45,7 @@ INCLUDE_KEYWORDS = [
 
 EXCLUDE_KEYWORDS = [
     "senior", "sr.", "sr ", "lead", "principal", "director", "vp", "vice president",
-    "head of", "head,", "chief", "managing director", "manager", "svp", "evp",
+    "head of", "head,", "chief", "managing director", "svp", "evp",
     "intern", "internship", "trainee", "apprentice", "graduate program", "entry level",
     "fresher", "co-op", "coop",
     "sales", "leasing agent", "broker assistant", "receptionist",
@@ -73,16 +75,13 @@ HEADERS = {
     "Accept-Language": "en-US,en;q=0.9",
 }
 
-# 86400 = 24 hours
 TIME_WINDOW_SECONDS = 86400
 
 SEEN_FILE = "seen_jobs.txt"
-# How long to keep entries in the seen file (seconds). 7 days = plenty.
-SEEN_TTL_SECONDS = 7 * 24 * 3600
+SEEN_TTL_SECONDS = 2 * 24 * 3600
 
 
 def load_seen():
-    """Returns a dict: {job_id: timestamp_when_added}"""
     seen = {}
     if not os.path.exists(SEEN_FILE):
         return seen
@@ -95,7 +94,6 @@ def load_seen():
             try:
                 job_id, ts = line.split(",", 1)
                 ts = int(ts)
-                # Skip entries older than TTL (housekeeping)
                 if now - ts < SEEN_TTL_SECONDS:
                     seen[job_id] = ts
             except ValueError:
@@ -212,6 +210,7 @@ def run_once():
     total_alerted = 0
     total_failed = 0
     now = int(time.time())
+    debug_dropped_by_location = []
 
     with httpx.Client() as client:
         for query in SEARCH_QUERIES:
@@ -224,6 +223,11 @@ def run_once():
                     continue
                 total_title_matched += 1
                 if not passes_location_filter(job):
+                    # Log the first 30 drops so we can see what's being rejected
+                    if len(debug_dropped_by_location) < 30:
+                        debug_dropped_by_location.append(
+                            f"    DROPPED: '{job['title']}' @ '{job['company']}' | loc='{job['location']}'"
+                        )
                     continue
                 total_location_matched += 1
                 success = send_telegram(job)
@@ -237,6 +241,14 @@ def run_once():
             time.sleep(3)
 
     save_seen(seen)
+
+    # Print debug info about rejected jobs
+    if debug_dropped_by_location:
+        print("\n=== JOBS DROPPED BY LOCATION FILTER (showing up to 30) ===", flush=True)
+        for line in debug_dropped_by_location:
+            print(line, flush=True)
+        print("=== END DEBUG ===\n", flush=True)
+
     print(f"Scanned {total_scanned}, title-matched {total_title_matched}, "
           f"location-matched {total_location_matched}, "
           f"alerted {total_alerted}, failed {total_failed}, "
