@@ -19,23 +19,8 @@ jobs:
       - name: Install dependencies
         run: pip install httpx beautifulsoup4
 
-      - name: Restore dedupe database
-        uses: actions/cache@v4
-        with:
-          path: jobs_seen.db
-          key: jobs-seen-db-${{ github.run_id }}
-          restore-keys: |
-            jobs-seen-db-
-
       - name: Run watcher
         env:
           TELEGRAM_TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
         run: python watch.py
-
-      - name: Save dedupe database
-        uses: actions/cache/save@v4
-        if: always()
-        with:
-          path: jobs_seen.db
-          key: jobs-seen-db-${{ github.run_id }}
