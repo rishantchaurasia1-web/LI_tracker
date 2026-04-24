@@ -8,15 +8,33 @@ from bs4 import BeautifulSoup
 TELEGRAM_TOKEN = os.environ["TELEGRAM_TOKEN"]
 TELEGRAM_CHAT_ID = os.environ["TELEGRAM_CHAT_ID"]
 
-SEARCH_QUERIES = [
-    "real estate analyst",
-    "real estate associate",
-    "acquisitions analyst",
-    "real estate underwriter",
-    "real estate capital markets",
-    "real estate private equity",
-    "asset management analyst",
-    "investment banking analyst",
+# Each search = (keyword, location, remote_filter)
+# f_WT=2 = Remote jobs only (LinkedIn's "workplace type" filter)
+# Leaving f_WT empty = all workplace types (on-site / hybrid / remote)
+SEARCHES = [
+    # India — all workplace types
+    ("real estate analyst", "India", None),
+    ("real estate associate", "India", None),
+    ("acquisitions analyst", "India", None),
+    ("real estate underwriter", "India", None),
+    ("real estate capital markets", "India", None),
+    ("real estate private equity", "India", None),
+    ("asset management analyst", "India", None),
+    ("investment banking analyst", "India", None),
+
+    # United States — REMOTE only (f_WT=2)
+    ("real estate analyst", "United States", "2"),
+    ("real estate associate", "United States", "2"),
+    ("acquisitions analyst", "United States", "2"),
+    ("real estate underwriter", "United States", "2"),
+    ("real estate capital markets", "United States", "2"),
+    ("real estate private equity", "United States", "2"),
+    ("asset management analyst", "United States", "2"),
+
+    # Global remote — catches UK / Singapore / Europe remote
+    ("real estate analyst", "", "2"),
+    ("acquisitions analyst", "", "2"),
+    ("real estate private equity", "", "2"),
 ]
 
 INCLUDE_KEYWORDS = [
@@ -75,7 +93,7 @@ HEADERS = {
     "Accept-Language": "en-US,en;q=0.9",
 }
 
-TIME_WINDOW_SECONDS = 86400
+TIME_WINDOW_SECONDS = 86400   # 24 hours
 
 SEEN_FILE = "seen_jobs.txt"
 SEEN_TTL_SECONDS = 2 * 24 * 3600
@@ -107,16 +125,25 @@ def save_seen(seen):
             f.write(f"{job_id},{ts}\n")
 
 
-def build_url(query):
-    params = {"keywords": query, "f_TPR": f"r{TIME_WINDOW_SECONDS}", "sortBy": "DD"}
+def build_url(keyword, location, remote_filter):
+    params = {
+        "keywords": keyword,
+        "f_TPR": f"r{TIME_WINDOW_SECONDS}",
+        "sortBy": "DD",
+    }
+    if location:
+        params["location"] = location
+    if remote_filter:
+        params["f_WT"] = remote_filter  # 2 = Remote
     return "https://www.linkedin.com/jobs-guest/jobs/api/seeMoreJobPostings/search?" + urllib.parse.urlencode(params)
 
 
-def fetch_jobs_for_query(query, client):
+def fetch_jobs(keyword, location, remote_filter, client):
+    label = f"{keyword} | {location or 'Global'} | {'Remote' if remote_filter else 'Any'}"
     try:
-        r = client.get(build_url(query), headers=HEADERS, timeout=20, follow_redirects=True)
+        r = client.get(build_url(keyword, location, remote_filter), headers=HEADERS, timeout=20, follow_redirects=True)
         if r.status_code != 200:
-            print(f"  [{query}] status {r.status_code}", flush=True)
+            print(f"  [{label}] status {r.status_code}", flush=True)
             return []
         soup = BeautifulSoup(r.text, "html.parser")
         jobs = []
@@ -145,7 +172,7 @@ def fetch_jobs_for_query(query, client):
             })
         return jobs
     except Exception as e:
-        print(f"  [{query}] error: {e}", flush=True)
+        print(f"  [{label}] error: {e}", flush=True)
         return []
 
 
@@ -160,8 +187,10 @@ def passes_title_filter(job):
 
 def passes_location_filter(job):
     loc = job["location"].lower()
+    # India: any mode
     if any(h in loc for h in INDIA_HINTS):
         return True
+    # Elsewhere: fully remote only
     is_remote = "remote" in loc
     is_hybrid = "hybrid" in loc
     if is_remote and not is_hybrid:
@@ -210,11 +239,10 @@ def run_once():
     total_alerted = 0
     total_failed = 0
     now = int(time.time())
-    debug_dropped_by_location = []
 
     with httpx.Client() as client:
-        for query in SEARCH_QUERIES:
-            jobs = fetch_jobs_for_query(query, client)
+        for keyword, location, remote_filter in SEARCHES:
+            jobs = fetch_jobs(keyword, location, remote_filter, client)
             total_scanned += len(jobs)
             for job in jobs:
                 if job["id"] in seen:
@@ -223,11 +251,6 @@ def run_once():
                     continue
                 total_title_matched += 1
                 if not passes_location_filter(job):
-                    # Log the first 30 drops so we can see what's being rejected
-                    if len(debug_dropped_by_location) < 30:
-                        debug_dropped_by_location.append(
-                            f"    DROPPED: '{job['title']}' @ '{job['company']}' | loc='{job['location']}'"
-                        )
                     continue
                 total_location_matched += 1
                 success = send_telegram(job)
@@ -241,14 +264,6 @@ def run_once():
             time.sleep(3)
 
     save_seen(seen)
-
-    # Print debug info about rejected jobs
-    if debug_dropped_by_location:
-        print("\n=== JOBS DROPPED BY LOCATION FILTER (showing up to 30) ===", flush=True)
-        for line in debug_dropped_by_location:
-            print(line, flush=True)
-        print("=== END DEBUG ===\n", flush=True)
-
     print(f"Scanned {total_scanned}, title-matched {total_title_matched}, "
           f"location-matched {total_location_matched}, "
           f"alerted {total_alerted}, failed {total_failed}, "
