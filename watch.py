@@ -3,6 +3,7 @@ import httpx
 import time
 import urllib.parse
 import re
+import random
 from bs4 import BeautifulSoup
 
 TELEGRAM_TOKEN = os.environ["TELEGRAM_TOKEN"]
@@ -308,7 +309,9 @@ HEADERS = {
 }
 
 TIME_WINDOW_SECONDS = 86400
-MAX_JD_FETCHES_PER_RUN = 30
+MAX_JD_FETCHES_PER_RUN = 15
+DELAY_BETWEEN_SEARCHES = 5
+DELAY_BETWEEN_JOBS = 1
 
 SEEN_FILE = "seen_jobs.txt"
 SEEN_TTL_SECONDS = 2 * 24 * 3600
@@ -472,7 +475,9 @@ def run_once():
     jd_fetches = 0
 
     with httpx.Client() as client:
-        for keyword, location, remote_filter in SEARCHES:
+        shuffled = list(SEARCHES)
+        random.shuffle(shuffled)
+        for keyword, location, remote_filter in shuffled:
             jobs = fetch_jobs(keyword, location, remote_filter, client)
             scanned += len(jobs)
             for job in jobs:
@@ -518,9 +523,8 @@ def run_once():
                     print(f"  ✅ [{reason}] {job['title']} @ {job['company']} — {job['location']}", flush=True)
                 else:
                     failed += 1
-                time.sleep(1)
-            time.sleep(2)
-
+                time.sleep(DELAY_BETWEEN_JOBS)
+            time.sleep(DELAY_BETWEEN_SEARCHES)
     save_seen(seen)
     print(f"Scanned {scanned}, matched {matched}, alerted {alerted}, failed {failed}, "
           f"JD fetches used {jd_fetches}/{MAX_JD_FETCHES_PER_RUN}, "
