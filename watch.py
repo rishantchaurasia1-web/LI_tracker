@@ -8,82 +8,296 @@ from bs4 import BeautifulSoup
 TELEGRAM_TOKEN = os.environ["TELEGRAM_TOKEN"]
 TELEGRAM_CHAT_ID = os.environ["TELEGRAM_CHAT_ID"]
 
-# Each search = (keyword, location, remote_filter)
-# f_WT=2 = Remote jobs only (LinkedIn's "workplace type" filter)
-# Leaving f_WT empty = all workplace types (on-site / hybrid / remote)
+# (keyword, location, remote_filter). f_WT=2 = remote only. None = any mode.
 SEARCHES = [
     # India — all workplace types
     ("real estate analyst", "India", None),
     ("real estate associate", "India", None),
     ("acquisitions analyst", "India", None),
+    ("acquisitions associate", "India", None),
     ("real estate underwriter", "India", None),
+    ("underwriting analyst", "India", None),
     ("real estate capital markets", "India", None),
     ("real estate private equity", "India", None),
+    ("repe analyst", "India", None),
     ("asset management analyst", "India", None),
-    ("investment banking analyst", "India", None),
-
-    # United States — REMOTE only (f_WT=2)
+    ("portfolio analyst", "India", None),
+    ("real estate investment", "India", None),
+    ("real estate finance", "India", None),
+    ("real estate valuation", "India", None),
+    ("real estate research", "India", None),
+    ("real estate development", "India", None),
+    ("real estate fund", "India", None),
+    ("reit analyst", "India", None),
+    ("real assets analyst", "India", None),
+    ("private markets analyst", "India", None),
+    ("investment analyst", "India", None),
+    ("financial analyst real estate", "India", None),
+    ("cre analyst", "India", None),
+    # US remote
     ("real estate analyst", "United States", "2"),
     ("real estate associate", "United States", "2"),
     ("acquisitions analyst", "United States", "2"),
     ("real estate underwriter", "United States", "2"),
-    ("real estate capital markets", "United States", "2"),
     ("real estate private equity", "United States", "2"),
     ("asset management analyst", "United States", "2"),
-
-    # Global remote — catches UK / Singapore / Europe remote
+    # Global remote
     ("real estate analyst", "", "2"),
     ("acquisitions analyst", "", "2"),
     ("real estate private equity", "", "2"),
+    ("real estate associate", "", "2"),
+    ("real estate underwriter", "", "2"),
 ]
 
+# Path A: any of these as a substring in title = direct match
 INCLUDE_KEYWORDS = [
-    "commercial real estate analyst", "cre analyst", "real estate financial analyst",
-    "real estate acquisitions analyst", "acquisitions analyst", "acquisitions associate",
-    "real estate investment analyst", "real estate underwriter", "underwriting analyst",
-    "real estate analyst",
-    "asset management analyst", "real estate asset manager", "portfolio analyst",
-    "fund analyst", "investment management analyst", "investment banking analyst",
-    "capital markets analyst", "real estate private equity", "repe analyst",
-    "real estate debt analyst", "real estate credit analyst", "commercial mortgage analyst",
-    "cmbs analyst", "real estate finance analyst", "real estate lending analyst",
-    "real estate valuation analyst", "valuation analyst", "real estate research analyst",
-    "market research analyst", "reit analyst", "due diligence analyst",
-    "property analyst", "real estate strategy analyst",
-    "real estate development analyst", "development analyst", "real estate transaction analyst",
-    "investments associate", "land acquisition analyst", "site acquisition analyst",
-    "real estate associate",
-    "multifamily", "office acquisitions", "retail real estate", "industrial real estate",
-    "mixed use development", "hospitality real estate", "healthcare real estate",
-    "net lease", "triple net", "self storage",
-    "real assets analyst", "private markets analyst", "alternative investments",
-    "infrastructure analyst", "institutional investment analyst", "junior investment analyst",
-    "financial analyst",
+    "real estate analyst", "commercial real estate analyst", "cre analyst",
+    "real estate financial analyst", "real estate investment analyst",
+    "real estate acquisitions analyst", "acquisitions analyst",
+    "underwriting analyst", "real estate underwriter",
+    "real estate credit analyst", "real estate debt analyst",
+    "real estate equity analyst", "real estate finance analyst",
+    "real estate valuation analyst", "real estate due diligence analyst",
+    "real estate research analyst", "real estate market analyst",
+    "real estate portfolio analyst", "real estate asset management analyst",
+    "real estate fund analyst", "real estate capital markets analyst",
+    "real estate transaction analyst", "real estate development analyst",
+    "real estate strategy analyst", "real estate structured finance analyst",
+    "real estate mortgage analyst", "commercial mortgage analyst", "cmbs analyst",
+    "real estate securities analyst", "real estate risk analyst",
+    "real estate compliance analyst", "real estate reporting analyst",
+    "real estate budget analyst", "real estate operations analyst",
+    "real estate investment management analyst", "real estate lending analyst",
+    "real estate originations analyst", "real estate disposition analyst",
+    "real estate joint venture analyst", "real estate lease analyst",
+    "real estate asset analyst", "real estate property analyst",
+    "real estate feasibility analyst", "real estate mixed use analyst",
+    "real estate land analyst", "land acquisition analyst", "site acquisition analyst",
+    "multifamily analyst", "multifamily acquisitions", "multifamily underwriting",
+    "multifamily investment", "office real estate analyst",
+    "retail real estate analyst", "industrial real estate analyst",
+    "hospitality real estate analyst", "healthcare real estate analyst",
+    "senior housing analyst", "net lease analyst", "triple net analyst",
+    "self storage analyst", "data center real estate", "student housing analyst",
+    "affordable housing analyst", "workforce housing analyst",
+    "real estate associate", "acquisitions associate",
+    "investment associate real estate", "real estate finance associate",
+    "asset management associate", "real estate capital markets associate",
+    "real estate private equity associate", "repe associate",
+    "real estate development associate", "real estate underwriting associate",
+    "real estate research associate", "real estate transaction associate",
+    "real estate portfolio associate", "real estate debt associate",
+    "real estate equity associate", "real estate structured finance associate",
+    "real estate investment associate", "real estate lending associate",
+    "real estate originations associate", "real estate joint venture associate",
+    "real estate asset management associate", "real estate fund associate",
+    "real estate valuation associate", "real estate due diligence associate",
+    "real estate credit associate",
+    "real estate private equity", "repe analyst", "real estate fund",
+    "private real estate analyst", "real estate alternatives analyst",
+    "real assets analyst", "real assets associate",
+    "private markets analyst", "institutional real estate analyst",
+    "real estate lp analyst", "real estate gp analyst",
+    "real estate equity fund", "real estate debt fund",
+    "real estate core fund", "real estate value add",
+    "real estate opportunistic", "real estate mezzanine",
+    "real estate preferred equity",
+    "real estate asset manager", "asset management analyst",
+    "real estate portfolio manager", "portfolio analyst",
+    "real estate investment manager", "real estate performance analyst",
+    "real estate waterfall analyst", "real estate returns analyst",
+    "real estate noi analyst", "real estate cash flow analyst",
+    "development finance analyst", "real estate project finance",
+    "real estate construction finance", "real estate proforma",
+    "real estate land development", "real estate entitlement",
+    "real estate pre development", "real estate mixed use development",
+    "real estate ground up development", "real estate repositioning",
+    "commercial real estate lending", "cre lending analyst",
+    "real estate loan analyst", "real estate underwriter debt",
+    "real estate bridge loan", "real estate construction loan",
+    "real estate structured debt", "real estate loan underwriter",
+    "real estate agency lending", "freddie mac", "fannie mae",
+    "fha multifamily", "real estate conduit loan",
+    "real estate balance sheet lending", "real estate syndicated loan",
+    "real estate investment sales", "real estate equity placement",
+    "real estate debt placement", "real estate securitization",
+    "real estate capital raise", "real estate investor relations",
+    "real estate lp relations", "real estate syndication",
+    "real estate appraisal", "real estate mai analyst",
+    "real estate dcf", "real estate discounted cash flow",
+    "real estate cap rate", "real estate mark to market",
+    "real estate nav analyst", "real estate fair value",
+    "argus analyst",
+    "real estate market research", "real estate economics",
+    "real estate forecasting", "real estate data analyst",
+    "real estate intelligence", "real estate trends",
+    "real estate sector analyst", "reit analyst",
+    "real estate equity research",
+    "real estate accounting analyst", "real estate financial reporting",
+    "real estate fund accounting", "real estate tax analyst",
+    "real estate audit analyst", "real estate fp&a",
+    "real estate financial planning", "real estate treasury",
+    "property finance analyst", "real estate leasing finance",
+    "real estate lease administration", "real estate revenue analyst",
+    "real estate operating budget", "real estate capital expenditure",
+    "real estate capex", "real estate property performance",
+    "proptech analyst", "real estate technology analyst",
+    "real estate esg analyst", "real estate sustainability",
+    "real estate impact investing", "real estate opportunity zone",
+    "real estate 1031", "real estate tax credit", "lihtc analyst",
+    "real estate infrastructure", "real estate special situations",
+    "real estate distressed", "real estate workout",
+    "real estate npl", "real estate reo",
+    "financial analyst", "investment analyst", "private equity analyst",
+    "investment banking analyst",
 ]
 
+# Hard-block titles regardless of other matches
 EXCLUDE_KEYWORDS = [
-    "senior", "sr.", "sr ", "lead", "principal", "director", "vp", "vice president",
-    "head of", "head,", "chief", "managing director", "svp", "evp",
-    "intern", "internship", "trainee", "apprentice", "graduate program", "entry level",
+    "director", "vp", "vice president", "head of", "head,",
+    "chief", "managing director", "svp", "evp", "president",
+    "intern", "internship", "trainee", "apprentice", "graduate program",
     "fresher", "co-op", "coop",
-    "sales", "leasing agent", "broker assistant", "receptionist",
+    "sales representative", "leasing agent", "broker assistant", "receptionist",
+    "administrative assistant", "executive assistant",
 ]
 
+# For Path B: title must have at least one of these "finance-adjacent" words
+# to justify a JD fetch (prevents JD-checking software engineer jobs)
+PATH_B_TITLE_HINTS = [
+    "analyst", "associate", "investment", "finance", "financial",
+    "portfolio", "capital", "fund", "credit", "debt", "equity",
+    "underwriter", "underwriting", "valuation", "acquisitions",
+    "research", "strategy", "advisory", "consulting",
+]
+
+# Target companies — brand names only (no "India", "Real Estate", "Group" etc.)
+# Case-insensitive substring match against LinkedIn's company name.
 TARGET_COMPANIES = [
-    "cbre", "jll", "cushman", "wakefield", "colliers", "marcus & millichap", "newmark",
-    "blackstone", "brookfield", "ares", "kkr", "starwood", "hines", "prologis", "pgim",
-    "equity residential", "avalonbay", "simon property", "welltower", "digital realty",
-    "wells fargo", "goldman sachs", "morgan stanley", "jpmorgan", "j.p. morgan",
-    "walker & dunlop",
+    # Private Equity & Investment Management
+    "blackstone", "brookfield", "starwood", "fortress investment",
+    "cerberus capital", "apollo global", "ares management",
+    "kkr", "carlyle", "warburg pincus", "oaktree",
+    "angelo gordon", "lone star funds", "tpg", "benefit street",
+    "amherst", "pretium", "greystar", "cortland",
+    "invesco", "pgim", "nuveen", "principal real estate",
+    "metlife investment", "prudential real estate", "tiaa",
+    "clarion partners", "heitman", "cornerstone real estate",
+    "lasalle investment", "bentall greenoak", "greenoak",
+    "lionstone", "waterton", "stockbridge",
+    "hamilton lane", "kayne anderson",
+    # REITs & Operating
+    "prologis", "digital realty", "equinix", "cbre investment",
+    "hines", "tishman speyer", "related companies", "vornado",
+    "boston properties", "sl green", "mack-cali",
+    "cousins properties", "highwoods", "brandywine",
+    "piedmont office",
+    # Debt & Lending
+    "walker & dunlop", "walker and dunlop", "arbor realty",
+    "ready capital", "ladder capital", "mesa west",
+    "torchlight", "owl rock", "blue owl",
+    # Advisory & Brokerage
+    "cbre", "jll", "cushman", "wakefield", "colliers",
+    "newmark", "marcus & millichap", "savills",
+    "knight frank", "eastdil", "berkadia", "avison young",
+    # UK/European
+    "bnp paribas real estate", "axa im", "allianz real estate",
+    "union investment", "deka immobilien", "dws",
+    "aberdeen standard", "schroders", "patrizia",
+    "tristan capital", "round hill capital",
+    # APAC
+    "gic", "mapletree", "capitaland", "ascendas",
+    "keppel", "frasers property", "esr", "pag real estate",
+    "gaw capital", "cppib", "cdpq", "oxford properties",
+    "quadreal", "ivanhoe cambridge", "ivanhoé",
+    "manulife real estate", "sumitomo real estate",
+    "mitsubishi estate", "tokyu land", "lendlease",
+    "dexus", "charter hall",
+    # Indian Developers
+    "dlf", "godrej properties", "oberoi realty", "prestige estates",
+    "brigade enterprises", "sobha", "mahindra lifespace",
+    "lodha", "macrotech", "puravankara", "kolte patil",
+    "shapoorji pallonji", "tata realty", "embassy",
+    "hiranandani", "raheja", "phoenix mills",
+    "sunteck", "keystone realtors", "rustomjee",
+    "nirlon", "nesco", "equinox india",
+    "omaxe", "db realty", "indiabulls real estate", "ansal api",
+    # Indian RE PE / Funds
+    "piramal fund", "kotak realty", "hdfc capital",
+    "ask property", "motilal oswal real estate",
+    "edelweiss alternatives", "360 one", "icici prudential real estate",
+    "sundaram alternates", "centrum real estate",
+    "xander", "indospace", "indiareit",
+    "milestone capital", "altico", "investcorp",
+    # Indian NBFC & RE Lending
+    "piramal housing", "hdfc limited", "lic housing",
+    "indiabulls housing", "pnb housing", "bajaj housing",
+    "aadhar housing", "can fin homes", "gic housing finance",
+    "repco home", "india shelter", "aavas",
+    "home first finance", "aptus value", "shriram housing",
+    "tata capital housing", "l&t finance", "godrej housing",
+    "aditya birla housing", "icici home", "kotak mahindra prime",
+    # Indian REITs
+    "embassy office parks", "mindspace business parks",
+    "brookfield india real estate", "nexus select",
+    # Logistics
+    "welspun one", "logos india", "embassy industrial",
+    "glp india", "stellar value chain",
+    # IBs
+    "goldman sachs", "morgan stanley", "jpmorgan",
+    "j.p. morgan", "bank of america", "citibank", "citi",
+    "barclays", "deutsche bank", "credit suisse",
+    "standard chartered", "hsbc", "nomura", "ubs",
+    "jefferies", "rbc capital", "wells fargo",
+    # Big 4 & Consulting
+    "deloitte", "pwc", "ernst & young", " ey ", "kpmg",
+    "mckinsey", "bcg", "bain", "grant thornton",
+    "rsm", "bdo",
 ]
 
 INDIA_HINTS = [
     "india",
-    "mumbai", "bombay", "bengaluru", "bangalore", "hyderabad", "pune", "gurgaon",
-    "gurugram", "noida", "delhi", "new delhi", "ncr", "chennai", "kolkata",
-    "ahmedabad", "jaipur", "kochi", "cochin", "indore", "thane", "navi mumbai",
+    "mumbai", "bombay", "bengaluru", "bangalore", "hyderabad", "pune",
+    "delhi", "new delhi", "ncr", "gurgaon", "gurugram", "noida", "ghaziabad", "faridabad",
+    "chennai", "madras", "kolkata", "calcutta",
+    "ahmedabad", "jaipur", "kochi", "cochin", "ernakulam", "indore",
+    "thane", "navi mumbai", "lucknow", "kanpur", "nagpur", "bhopal",
+    "surat", "vadodara", "baroda", "chandigarh", "mohali", "panchkula",
+    "dehradun", "raipur", "ranchi", "bhubaneswar", "visakhapatnam", "vizag",
+    "coimbatore", "madurai", "trichy", "tiruchirappalli",
+    "thiruvananthapuram", "trivandrum", "kozhikode", "calicut",
+    "mysore", "mysuru", "mangalore", "mangaluru",
+    "hubli", "hubballi", "belgaum", "belagavi",
+    "guwahati", "patna", "varanasi", "allahabad", "prayagraj",
+    "agra", "meerut", "amritsar", "ludhiana", "jalandhar",
+    "jammu", "srinagar", "shimla", "udaipur", "jodhpur",
+    "kota", "ajmer", "aurangabad", "nashik", "solapur", "kolhapur",
+    "siliguri", "asansol", "durgapur", "bhilai", "jamshedpur", "dhanbad",
+    "goa", "panaji", "margao", "vasco", "puducherry", "pondicherry",
     "maharashtra", "karnataka", "telangana", "tamil nadu", "uttar pradesh",
     "haryana", "gujarat", "rajasthan", "west bengal", "kerala",
+    "andhra pradesh", "madhya pradesh", "bihar", "odisha", "orissa",
+    "punjab", "himachal pradesh", "uttarakhand", "jharkhand", "chhattisgarh",
+    "assam", "meghalaya", "manipur", "tripura", "nagaland", "mizoram",
+    "arunachal pradesh", "sikkim", "jammu and kashmir", "ladakh",
+    "andaman", "lakshadweep",
+]
+
+# JD must mention at least one of these to pass Path B
+JD_MUST_CONTAIN = [
+    "real estate", "commercial real estate", " cre ",
+    "repe", "reit", "reits",
+    "alternative investment", "alternative investments", "alternatives",
+    "private markets", "private equity real estate",
+    "multi-asset", "multi asset", "multiple asset classes",
+    "real assets", "infrastructure fund", "direct real estate",
+    "property investment", "property fund", "realty",
+    "aum", "institutional investor", "institutional investors",
+    "asset management firm", "amc", "asset management company",
+    "multifamily", "industrial real estate", "office real estate",
+    "retail real estate", "hospitality real estate",
+    "cmbs", "mortgage-backed", "mortgage backed",
+    "cap rate", "noi ", "argus", "dcf", "underwriting",
 ]
 
 HEADERS = {
@@ -93,7 +307,8 @@ HEADERS = {
     "Accept-Language": "en-US,en;q=0.9",
 }
 
-TIME_WINDOW_SECONDS = 86400   # 24 hours
+TIME_WINDOW_SECONDS = 86400
+MAX_JD_FETCHES_PER_RUN = 30
 
 SEEN_FILE = "seen_jobs.txt"
 SEEN_TTL_SECONDS = 2 * 24 * 3600
@@ -126,15 +341,11 @@ def save_seen(seen):
 
 
 def build_url(keyword, location, remote_filter):
-    params = {
-        "keywords": keyword,
-        "f_TPR": f"r{TIME_WINDOW_SECONDS}",
-        "sortBy": "DD",
-    }
+    params = {"keywords": keyword, "f_TPR": f"r{TIME_WINDOW_SECONDS}", "sortBy": "DD"}
     if location:
         params["location"] = location
     if remote_filter:
-        params["f_WT"] = remote_filter  # 2 = Remote
+        params["f_WT"] = remote_filter
     return "https://www.linkedin.com/jobs-guest/jobs/api/seeMoreJobPostings/search?" + urllib.parse.urlencode(params)
 
 
@@ -158,10 +369,10 @@ def fetch_jobs(keyword, location, remote_filter, client):
             url = link_tag.get("href", "").split("?")[0]
             if not url:
                 continue
-            match = re.search(r"(\d{8,})", url)
-            if not match:
+            m = re.search(r"(\d{8,})", url)
+            if not m:
                 continue
-            job_id = match.group(1)
+            job_id = m.group(1)
             jobs.append({
                 "id": job_id,
                 "title": title_tag.get_text(strip=True),
@@ -176,26 +387,19 @@ def fetch_jobs(keyword, location, remote_filter, client):
         return []
 
 
-def passes_title_filter(job):
-    title_lower = job["title"].lower()
-    if not any(kw in title_lower for kw in INCLUDE_KEYWORDS):
-        return False
-    if any(kw in title_lower for kw in EXCLUDE_KEYWORDS):
-        return False
-    return True
+def title_has_excludes(job):
+    t = job["title"].lower()
+    return any(kw in t for kw in EXCLUDE_KEYWORDS)
 
 
-def passes_location_filter(job):
-    loc = job["location"].lower()
-    # India: any mode
-    if any(h in loc for h in INDIA_HINTS):
-        return True
-    # Elsewhere: fully remote only
-    is_remote = "remote" in loc
-    is_hybrid = "hybrid" in loc
-    if is_remote and not is_hybrid:
-        return True
-    return False
+def title_has_includes(job):
+    t = job["title"].lower()
+    return any(kw in t for kw in INCLUDE_KEYWORDS)
+
+
+def title_has_path_b_hint(job):
+    t = job["title"].lower()
+    return any(h in t for h in PATH_B_TITLE_HINTS)
 
 
 def is_target_company(company_name):
@@ -203,13 +407,44 @@ def is_target_company(company_name):
     return any(tc in c for tc in TARGET_COMPANIES)
 
 
-def send_telegram(job):
+def passes_location_filter(job):
+    loc = job["location"].lower()
+    if any(h in loc for h in INDIA_HINTS):
+        return True
+    is_remote = "remote" in loc
+    is_hybrid = "hybrid" in loc
+    return is_remote and not is_hybrid
+
+
+def fetch_job_description(job_id, client):
+    url = f"https://www.linkedin.com/jobs-guest/jobs/api/jobPosting/{job_id}"
+    try:
+        r = client.get(url, headers=HEADERS, timeout=20, follow_redirects=True)
+        if r.status_code != 200:
+            return ""
+        soup = BeautifulSoup(r.text, "html.parser")
+        desc = soup.select_one("div.show-more-less-html__markup, div.description__text")
+        return desc.get_text(" ", strip=True).lower() if desc else ""
+    except Exception:
+        return ""
+
+
+def jd_mentions_re(job_id, client):
+    jd = fetch_job_description(job_id, client)
+    if not jd:
+        return False
+    return any(term in jd for term in JD_MUST_CONTAIN)
+
+
+def send_telegram(job, reason):
     star = "⭐ " if is_target_company(job["company"]) else ""
+    tag = f"_{reason}_\n"
     text = (
         f"🎯 {star}*{job['title']}*\n"
         f"🏢 {job['company']}\n"
         f"📍 {job['location']}\n"
-        f"⏱️ {job['posted']}\n\n"
+        f"⏱️ {job['posted']}\n"
+        f"{tag}\n"
         f"[Apply now →]({job['url']})"
     )
     try:
@@ -233,41 +468,63 @@ def run_once():
     seen = load_seen()
     print(f"Loaded {len(seen)} previously-seen job ids", flush=True)
 
-    total_scanned = 0
-    total_title_matched = 0
-    total_location_matched = 0
-    total_alerted = 0
-    total_failed = 0
-    now = int(time.time())
+    scanned = matched = alerted = failed = 0
+    jd_fetches = 0
 
     with httpx.Client() as client:
         for keyword, location, remote_filter in SEARCHES:
             jobs = fetch_jobs(keyword, location, remote_filter, client)
-            total_scanned += len(jobs)
+            scanned += len(jobs)
             for job in jobs:
                 if job["id"] in seen:
                     continue
-                if not passes_title_filter(job):
+
+                # Hard exclude (director, VP, intern etc.) — never pass
+                if title_has_excludes(job):
                     continue
-                total_title_matched += 1
+
+                # Location filter applies to EVERYONE
                 if not passes_location_filter(job):
                     continue
-                total_location_matched += 1
-                success = send_telegram(job)
+
+                is_target = is_target_company(job["company"])
+                title_match = title_has_includes(job)
+                reason = None
+
+                # Path A: Title directly matches → pass, no JD
+                if title_match:
+                    reason = "title match"
+                # Target company: JD-check even with odd titles (skip path B pre-filter)
+                elif is_target:
+                    if jd_fetches < MAX_JD_FETCHES_PER_RUN:
+                        jd_fetches += 1
+                        if jd_mentions_re(job["id"], client):
+                            reason = "target co. + JD match"
+                # Path B: Non-target co, title has analyst-like word, check JD
+                elif title_has_path_b_hint(job):
+                    if jd_fetches < MAX_JD_FETCHES_PER_RUN:
+                        jd_fetches += 1
+                        if jd_mentions_re(job["id"], client):
+                            reason = "JD match"
+
+                if reason is None:
+                    continue
+
+                matched += 1
+                success = send_telegram(job, reason)
                 if success:
-                    seen[job["id"]] = now
-                    total_alerted += 1
-                    print(f"  ✅ {job['title']} @ {job['company']} — {job['location']}", flush=True)
+                    seen[job["id"]] = int(time.time())
+                    alerted += 1
+                    print(f"  ✅ [{reason}] {job['title']} @ {job['company']} — {job['location']}", flush=True)
                 else:
-                    total_failed += 1
+                    failed += 1
                 time.sleep(1)
-            time.sleep(3)
+            time.sleep(2)
 
     save_seen(seen)
-    print(f"Scanned {total_scanned}, title-matched {total_title_matched}, "
-          f"location-matched {total_location_matched}, "
-          f"alerted {total_alerted}, failed {total_failed}, "
-          f"seen-file now has {len(seen)} ids", flush=True)
+    print(f"Scanned {scanned}, matched {matched}, alerted {alerted}, failed {failed}, "
+          f"JD fetches used {jd_fetches}/{MAX_JD_FETCHES_PER_RUN}, "
+          f"seen-file has {len(seen)} ids", flush=True)
 
 
 if __name__ == "__main__":
