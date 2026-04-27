@@ -2,9 +2,8 @@
 Adzuna API scraper. Free aggregator that indexes Naukri, Monster, TimesJobs,
 Shine, and other Indian sites.
 
-Free tier: 250 calls/day, 25/min. We use ~20-40/day.
+Free tier: 250 calls/day, 25/min.
 Endpoint: https://api.adzuna.com/v1/api/jobs/{country}/search/{page}
-Country codes: in=India, us=USA, gb=UK
 """
 import os
 import time
@@ -13,44 +12,40 @@ from common import HEADERS
 ADZUNA_APP_ID = os.environ.get("ADZUNA_APP_ID", "")
 ADZUNA_APP_KEY = os.environ.get("ADZUNA_APP_KEY", "")
 
-# Search query plans: (country_code, keyword, location_or_blank)
-# Each entry = 1 API call. Stay well under 250/day across all runs.
-# Current setup: ~20 calls per run → at */15 cron = ~1920/day → TOO MANY
-# Solution: only call Adzuna every 4th run (effectively every hour)
-# Implemented via the run_id check below.
-
+# India queries — covers most relevant roles
 INDIA_QUERIES = [
     "real estate analyst",
     "acquisitions analyst",
     "real estate associate",
     "real estate underwriter",
-    "real estate finance",
     "real estate investment",
     "asset management analyst",
     "investment analyst",
     "financial modeling",
-    "financial modelling",
     "valuation analyst",
     "real estate private equity",
     "argus analyst",
     "reit analyst",
-    "real estate fund",
 ]
 
+# US remote — keep small
 US_QUERIES = [
-    "real estate analyst remote",
-    "acquisitions analyst remote",
-    "financial modeling remote",
+    "real estate analyst",
+    "acquisitions analyst",
+    "financial modeling",
 ]
 
+# Quota math:
+# 15 queries × runs per day. With */15 cron = 96 runs/day.
+# That's 1440 calls — way over 250 quota.
+# Solution: run only when UTC minute is in [0, 15, 30, 45] AND hour is even
+# = 12 runs/day × 15 calls = 180 calls/day. Safe.
 
 def _should_run_this_cycle():
-    """Only run Adzuna every ~4th cron tick to stay under quota.
-    Uses minute of the hour as a cheap rotor — runs only when minute < 15.
-    With */15 cron, that's roughly once per hour."""
     import datetime
-    minute = datetime.datetime.utcnow().minute
-    return minute < 15
+    now = datetime.datetime.utcnow()
+    # Run every 2 hours. Hour is even AND minute is in first 15 of the hour.
+    return (now.hour % 2 == 0) and (now.minute < 15)
 
 
 def _call(client, country, keyword, where=""):
@@ -68,6 +63,9 @@ def _call(client, country, keyword, where=""):
         params["where"] = where
     try:
         r = client.get(url, params=params, headers=HEADERS)
+        if r.status_code == 401 or r.status_code == 403:
+            print(f"    [adzuna] AUTH FAILED — status {r.status_code}. Check ADZUNA_APP_ID/KEY secrets.", flush=True)
+            return None  # signal: stop trying
         if r.status_code != 200:
             print(f"    [adzuna:{country}:{keyword[:30]}] status {r.status_code}", flush=True)
             return []
@@ -84,14 +82,21 @@ def fetch_all(client):
         return []
 
     if not _should_run_this_cycle():
-        print("    [adzuna] not this cycle (rate budgeting) — skipping", flush=True)
+        print("    [adzuna] not this cycle (every 2 hours) — skipping", flush=True)
         return []
 
+    print(f"    [adzuna] credentials present, running {len(INDIA_QUERIES)+len(US_QUERIES)} queries", flush=True)
     all_jobs = []
+    auth_failed = False
 
-    # India queries (no `where` — covers all India)
     for kw in INDIA_QUERIES:
-        for raw in _call(client, "in", kw):
+        if auth_failed:
+            break
+        results = _call(client, "in", kw)
+        if results is None:
+            auth_failed = True
+            break
+        for raw in results:
             jid = str(raw.get("id", ""))
             if not jid:
                 continue
@@ -105,14 +110,19 @@ def fetch_all(client):
                 "location": loc,
                 "posted": (raw.get("created", "") or "")[:10] or "recent",
                 "url": raw.get("redirect_url", ""),
-                "jd_text": desc,  # adzuna returns description snippet, no extra fetch
+                "jd_text": desc,
                 "source": "Adzuna-IN",
             })
-        time.sleep(3)  # respect 25/min
+        time.sleep(3)
 
-    # US queries (remote)
     for kw in US_QUERIES:
-        for raw in _call(client, "us", kw):
+        if auth_failed:
+            break
+        results = _call(client, "us", kw)
+        if results is None:
+            auth_failed = True
+            break
+        for raw in results:
             jid = str(raw.get("id", ""))
             if not jid:
                 continue
@@ -126,10 +136,11 @@ def fetch_all(client):
                 "location": loc,
                 "posted": (raw.get("created", "") or "")[:10] or "recent",
                 "url": raw.get("redirect_url", ""),
+                "jd_url": raw.get("redirect_url", ""),
                 "jd_text": desc,
                 "source": "Adzuna-US",
             })
         time.sleep(3)
 
-    print(f"    [adzuna] {len(all_jobs)} total jobs across {len(INDIA_QUERIES)+len(US_QUERIES)} queries", flush=True)
+    print(f"    [adzuna] {len(all_jobs)} total jobs", flush=True)
     return all_jobs
