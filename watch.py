@@ -2,7 +2,7 @@ import os
 import time
 import random
 import httpx
-from scrapers import linkedin_guest, naukri, greenhouse, lever, workday
+from scrapers import linkedin_guest, greenhouse, lever, workday
 from common import (
     load_seen, save_seen, send_telegram,
     title_has_excludes, title_has_includes, title_has_path_b_hint,
@@ -13,7 +13,6 @@ MAX_JD_FETCHES_PER_RUN = 20
 DELAY_BETWEEN_SOURCES = 4
 
 def process_jobs(jobs, seen, jd_budget, client):
-    """Common filter pipeline used by every source."""
     matched = alerted = failed = 0
     jd_used = 0
     for job in jobs:
@@ -64,7 +63,6 @@ def run_once():
 
     sources = [
         ("LinkedIn (guest)", linkedin_guest.fetch_all),
-        ("Naukri",           naukri.fetch_all),
         ("Greenhouse",       greenhouse.fetch_all),
         ("Lever",            lever.fetch_all),
         ("Workday",          workday.fetch_all),
@@ -79,7 +77,7 @@ def run_once():
             except Exception as e:
                 print(f"  {name} crashed: {e}", flush=True)
                 jobs = []
-            print(f"  fetched {len(jobs)} jobs", flush=True)
+            print(f"  fetched {len(jobs)} jobs total", flush=True)
             total_scanned += len(jobs)
             m, a, f, used = process_jobs(jobs, seen, jd_budget, client)
             jd_budget -= used
