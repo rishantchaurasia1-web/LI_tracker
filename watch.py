@@ -2,7 +2,7 @@ import os
 import time
 import random
 import httpx
-from scrapers import linkedin_guest, greenhouse, lever, workday
+from scrapers import linkedin_guest, greenhouse, lever, workday, adzuna
 from common import (
     load_seen, save_seen, send_telegram,
     title_has_excludes, title_has_includes, title_has_path_b_hint,
@@ -63,6 +63,7 @@ def run_once():
 
     sources = [
         ("LinkedIn (guest)", linkedin_guest.fetch_all),
+        ("Adzuna (IN+US)",   adzuna.fetch_all),
         ("Greenhouse",       greenhouse.fetch_all),
         ("Lever",            lever.fetch_all),
         ("Workday",          workday.fetch_all),
